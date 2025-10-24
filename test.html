@@ -1,0 +1,320 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Photos Picker - Best Practices Example</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 30px auto;
+            padding: 25px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+        }
+
+        h1 {
+            color: #0056b3;
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            display: block;
+            margin: 20px auto;
+        }
+
+            button:hover {
+                background-color: #0056b3;
+            }
+
+            button:disabled {
+                background-color: #cccccc;
+                cursor: not-allowed;
+            }
+
+        #status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+            word-break: break-all; /* Helps display long error messages */
+        }
+
+        .status-info {
+            background-color: #e0f7fa;
+            color: #007bb6;
+            border: 1px solid #00acc1;
+        }
+
+        .status-success {
+            background-color: #e6ffed;
+            color: #28a745;
+            border: 1px solid #28a745;
+        }
+
+        .status-error {
+            background-color: #ffe6e6;
+            color: #dc3545;
+            border: 1px solid #dc3545;
+        }
+
+        #pickerResults {
+            margin-top: 25px;
+            padding: 15px;
+            border: 1px dashed #cccccc;
+            border-radius: 4px;
+            min-height: 80px;
+            background-color: #fafafa;
+        }
+
+        .photo-thumbnail {
+            max-width: 120px;
+            height: auto;
+            margin: 8px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .photo-item {
+            display: inline-block;
+            text-align: center;
+            vertical-align: top;
+            margin: 10px;
+        }
+
+            .photo-item p {
+                font-size: 0.8em;
+                margin: 0;
+                padding: 5px 0;
+                max-width: 120px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Google Photos Picker Integration</h1>
+
+        <div id="status" class="status-info">Initializing application...</div>
+
+        <button id="authorize_button" disabled>Authorize & Open Photos Picker</button>
+
+        <h2>Selected Photos:</h2>
+        <div id="pickerResults">
+            <p>No photos selected yet.</p>
+        </div>
+    </div>
+
+    <!-- 1. Google Identity Services Library (GSI) - for OAuth 2.0 token acquisition -->
+    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+    <!-- 2. Google API Loader - for loading the Picker module -->
+    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+
+    <script>
+        // --- Configuration ---
+        const CLIENT_ID = '581289235705-9plf787utkkv8vo7q1sd04qu7alo5mta.apps.googleusercontent.com'; // <--- !!! REPLACE WITH YOUR CLIENT ID !!!
+        const SCOPES = [
+            'openid',
+            'profile',
+            'https://www.googleapis.com/auth/photospicker.mediaitems.readonly'
+            // 'https://www.googleapis.com/auth/photoslibrary.readonly' // Not strictly needed for Picker functionality itself
+        ];
+        const MULTISELECT_ENABLED = true;
+
+        // --- Global State Variables ---
+        let tokenClient;
+        let gapiPickerLoaded = false;
+        let gisClientLoaded = false;
+        let accessToken = null; // Store the obtained access token
+
+        // --- UI Helper Functions ---
+        function setStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status-${type}`;
+            console.log(`STATUS: ${message}`);
+        }
+
+        function setButtonState(enabled) {
+            const button = document.getElementById('authorize_button');
+            button.disabled = !enabled;
+            if (enabled) {
+                button.onclick = handleAuthAndOpenPicker;
+            } else {
+                button.onclick = null;
+            }
+        }
+
+        function clearPickerResults() {
+            const resultsDiv = document.getElementById('pickerResults');
+            resultsDiv.innerHTML = '<p>No photos selected yet.</p>';
+        }
+
+        // --- Library Load Callbacks ---
+        function gisLoaded() {
+            setStatus('Google Identity Services (GIS) library loaded.');
+            gisClientLoaded = true;
+            initializeTokenClient(); // Initialize token client as soon as GIS is ready
+            checkLibrariesLoaded();
+        }
+
+        function gapiLoaded() {
+            setStatus('Google API Client Library (gapi) loaded.');
+            gapi.load('picker', () => {
+                setStatus('Google Picker module loaded successfully.');
+                gapiPickerLoaded = true;
+                checkLibrariesLoaded();
+            });
+        }
+
+        function checkLibrariesLoaded() {
+            if (gisClientLoaded && gapiPickerLoaded) {
+                setStatus('All necessary Google libraries are loaded. Ready.');
+                setButtonState(true); // Enable the button
+            }
+        }
+
+        // --- OAuth 2.0 Token Client Initialization ---
+        function initializeTokenClient() {
+            if (!CLIENT_ID || CLIENT_ID === 'YOUR_OAUTH_CLIENT_ID') {
+                setStatus('ERROR: CLIENT_ID not set. Please replace YOUR_OAUTH_CLIENT_ID in the code.', 'error');
+                setButtonState(false);
+                return;
+            }
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES.join(' '),
+                // Using 'consent' for testing to ensure the consent screen is shown
+                // If you repeatedly get 403, 'consent' can help reset previous (bad) grants.
+                // For production, you might prefer 'select_account' or even '' if you manage refresh tokens.
+                prompt: 'consent',
+                callback: (tokenResponse) => {
+                    if (tokenResponse.error) {
+                        setStatus(`Error obtaining access token: ${tokenResponse.error} - ${tokenResponse.error_description || 'Unknown error'}`, 'error');
+                        console.error('Token acquisition failed:', tokenResponse);
+                        accessToken = null; // Clear token on error
+                        setButtonState(true); // Allow retry
+                    } else {
+                        setStatus('Access token obtained successfully. Attempting to open picker...', 'success');
+                        accessToken = tokenResponse.access_token;
+                        console.log('Obtained Access Token:', accessToken);
+                        // Now that we have the token, we can proceed to open the picker
+                        openPhotosPicker();
+                    }
+                },
+            });
+        }
+
+        // --- Event Handlers ---
+        async function handleAuthAndOpenPicker() {
+            setStatus('Requesting user authorization for access token...');
+            setButtonState(false); // Disable button during auth process
+            // This triggers the OAuth flow via popup/redirect
+            tokenClient.requestAccessToken();
+            // The rest of the process happens in the callback of initTokenClient
+        }
+
+        // --- Open Google Photos Picker ---
+        async function openPhotosPicker() {
+            if (!accessToken) {
+                setStatus('ERROR: No valid access token available to open the picker.', 'error');
+                setButtonState(true); // Allow retry
+                return;
+            }
+
+            try {
+                // The picker module should already be loaded via gapiLoaded, but add a fallback check
+                if (!gapi.picker) {
+                    await new Promise(resolve => gapi.load('picker', resolve));
+                }
+
+                const builder = new google.picker.PickerBuilder()
+                    .addView(new google.picker.PhotosView()) // More direct way than ViewId
+                    .setOAuthToken(accessToken)
+                    .setDeveloperKey("AIzaSyCNJ06PhrE1PODP1Z32qw3svK45hLk4gko")
+                    .setOrigin(window.location.origin) // CRITICAL: Must match GCP Authorized JavaScript Origins
+                    .setCallback(pickerCallback);
+
+                if (MULTISELECT_ENABLED) {
+                    builder.enableFeature(google.picker.Feature.MULTISELECT_ENABLED);
+                }
+
+                setStatus('Opening Google Photos Picker...');
+                const picker = builder.build();
+                picker.setVisible(true); // Display the picker UI
+            } catch (error) {
+                setStatus(`ERROR: Failed to open Photos Picker: ${error.message || error}`, 'error');
+                console.error('Error opening Photos Picker:', error);
+                setButtonState(true); // Allow retry
+            }
+        }
+
+        // --- Picker Callback Function ---
+        function pickerCallback(data) {
+            setButtonState(true); // Re-enable button after picker closes
+
+            if (data[google.picker.Response.ACTION] === google.picker.Action.PICKED) {
+                const docs = data[google.picker.Response.DOCUMENTS] || [];
+                if (docs.length === 0) {
+                    setStatus('No photos were selected.', 'info');
+                    clearPickerResults();
+                    return;
+                }
+
+                setStatus(`Successfully selected ${docs.length} photo(s).`, 'success');
+                displaySelectedPhotos(docs);
+            } else if (data[google.picker.Response.ACTION] === google.picker.Action.CANCEL) {
+                setStatus('Google Photos Picker was cancelled by the user.', 'info');
+                clearPickerResults();
+            } else {
+                setStatus(`Picker returned with unexpected action: ${data[google.picker.Response.ACTION]}`, 'error');
+                clearPickerResults();
+            }
+        }
+
+        // --- Display Results ---
+        function displaySelectedPhotos(docs) {
+            const resultsDiv = document.getElementById('pickerResults');
+            resultsDiv.innerHTML = '<h3>Selected Photos:</h3>'; // Reset for new selections
+
+            docs.forEach(d => {
+                const id = d[google.picker.Document.ID];
+                const name = d[google.picker.Document.NAME] || 'Untitled';
+                const url = d[google.picker.Document.URL]; // This is the public baseUrl from Photos Library API
+                const thumbnailUrl = (d[google.picker.Document.THUMBNAILS] || [])[0]?.[google.picker.Thumbnail.URL];
+
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'photo-item';
+                itemDiv.innerHTML = `
+                        ${thumbnailUrl ? `<a href="${url}" target="_blank"><img src="${thumbnailUrl}" class="photo-thumbnail" alt="${name}"></a>` : ''}
+                        <p title="${name}">${name}</p>
+                    `;
+                resultsDiv.appendChild(itemDiv);
+            });
+        }
+
+        // Initial setup for GIS client will be triggered by window.onload (implicitly called by async defer script)
+        // If gisLoaded is correctly set up, it will call initializeTokenClient()
+    </script>
+</body>
+</html>
