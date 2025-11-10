@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" aria-label="Speed" role="img">
+  <circle cx="48" cy="48" r="40" fill="#eaf0ff" stroke="#27407a" stroke-width="2"/>
+  <path d="M20 52a28 28 0 0 1 56 0" fill="none" stroke="#27407a" stroke-width="4"/>
+  <line x1="48" y1="48" x2="76" y2="44" stroke="#ff6d00" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="48" cy="48" r="4" fill="#27407a"/>
+</svg>

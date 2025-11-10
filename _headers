@@ -1,0 +1,14 @@
+﻿/*.wasm
+  Content-Type: application/wasm
+  
+/*.js
+  Content-Type: application/javascript
+  
+/*.dll
+  Content-Type: application/octet-stream
+  
+/*.dat
+  Content-Type: application/octet-stream
+  
+/*.blat
+  Content-Type: application/octet-stream

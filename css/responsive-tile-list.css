@@ -1,0 +1,10 @@
+/* Centering helpers for TileList */
+.tilelist-center { display:flex; justify-content:center; align-items:center; gap:8px; }
+.center-grid { display:flex; justify-content:center; }
+
+/* Fade-in effect for images */
+.rtl-img.transparent { opacity: 0; transition: opacity 200ms ease-in; }
+.rtl-img.fade-in { opacity: 1; transition: opacity 200ms ease-in; }
+
+/* Optional selected border */
+.rtl-tile.selected { outline: 2px solid var(--mud-palette-primary); outline-offset: -2px; }
